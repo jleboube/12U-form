@@ -145,8 +145,11 @@ CREATE INDEX IF NOT EXISTS idx_users_group ON users(group_id);
 -- Insert some sample groups
 INSERT INTO groups (name, description) VALUES 
     ('Demo Team', 'Demo team for testing'),
-    ('Lions Baseball', 'Lions youth baseball team'),
-    ('Eagles Baseball', 'Eagles youth baseball team')
+    ('MTown Rampage 12U Baseball', 'MTown 12U Team'),
+    ('MTown Rampage 11U Baseball', 'MTown 11U Team'),
+    ('MTown Rampage 10U Baseball', 'MTown 10U Team'),
+    ('Lions Baseball', 'TEST Lions youth baseball team'),
+    ('Eagles Baseball', 'TEST Eagles youth baseball team')
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert a sample admin user (password is 'admin123')
