@@ -1,7 +1,34 @@
+-- Create groups (teams) table
+CREATE TABLE IF NOT EXISTS groups (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create users table
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    group_id INTEGER REFERENCES groups(id),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Update scouting_reports table to include user_id
+ALTER TABLE scouting_reports ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+ALTER TABLE scouting_reports ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id);
+
 CREATE TABLE IF NOT EXISTS scouting_reports (
     id SERIAL PRIMARY KEY,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_id INTEGER REFERENCES users(id),
+    group_id INTEGER REFERENCES groups(id),
     
     -- Scout Information
     scout_name VARCHAR(255),
@@ -98,6 +125,23 @@ CREATE TABLE IF NOT EXISTS scouting_reports (
     followup_items TEXT
 );
 
--- Create index for faster queries
-CREATE INDEX idx_player_name ON scouting_reports(player_name);
-CREATE INDEX idx_created_at ON scouting_reports(created_at);
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_player_name ON scouting_reports(player_name);
+CREATE INDEX IF NOT EXISTS idx_created_at ON scouting_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_user_id ON scouting_reports(user_id);
+CREATE INDEX IF NOT EXISTS idx_group_id ON scouting_reports(group_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_group ON users(group_id);
+
+-- Insert some sample groups
+INSERT INTO groups (name, description) VALUES 
+    ('Demo Team', 'Demo team for testing'),
+    ('Lions Baseball', 'Lions youth baseball team'),
+    ('Eagles Baseball', 'Eagles youth baseball team')
+ON CONFLICT (name) DO NOTHING;
+
+-- Insert a sample admin user (password is 'admin123')
+-- Password hash for 'admin123' using bcrypt
+INSERT INTO users (email, password_hash, first_name, last_name, group_id) VALUES 
+    ('admin@demo.com', '$2b$10$rOzJsm7UzGkVxwjN7j4xZe5fv8v6w.Ac0xCEe5HdF3/1FHi3q9KJO', 'Admin', 'User', 1)
+ON CONFLICT (email) DO NOTHING;

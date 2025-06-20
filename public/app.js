@@ -2,16 +2,48 @@ class ScoutingApp {
     constructor() {
         this.currentReportId = null;
         this.reports = [];
+        this.currentUser = null;
         this.init();
     }
 
     init() {
-        this.bindEvents();
-        this.loadReports();
-        this.showReportsView();
+        this.bindAuthEvents();
+        this.checkAuthentication();
     }
 
-    bindEvents() {
+    bindAuthEvents() {
+        // Authentication form switches
+        document.getElementById('showRegister').addEventListener('click', (e) => {
+            e.preventDefault();
+            this.showRegisterForm();
+        });
+        
+        document.getElementById('showLogin').addEventListener('click', (e) => {
+            e.preventDefault();
+            this.showLoginForm();
+        });
+        
+        // Form submissions
+        document.getElementById('loginFormElement').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleLogin();
+        });
+        
+        document.getElementById('registerFormElement').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleRegister();
+        });
+        
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            this.handleLogout();
+        });
+        
+        // Load groups for registration
+        this.loadGroups();
+    }
+
+    bindAppEvents() {
         // Navigation
         document.getElementById('newReportBtn').addEventListener('click', () => this.showNewReportForm());
         document.getElementById('backBtn').addEventListener('click', () => this.showReportsView());
@@ -38,6 +70,174 @@ class ScoutingApp {
         // Set default date to today
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('scout_date').value = today;
+    }
+
+    async checkAuthentication() {
+        try {
+            const response = await fetch('/api/auth/me', {
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.currentUser = data.user;
+                this.showMainApp();
+            } else {
+                this.showAuthView();
+            }
+        } catch (error) {
+            console.error('Auth check failed:', error);
+            this.showAuthView();
+        }
+    }
+
+    async loadGroups() {
+        try {
+            const response = await fetch('/api/groups');
+            if (response.ok) {
+                const groups = await response.json();
+                const groupSelect = document.getElementById('registerGroup');
+                groupSelect.innerHTML = '<option value="">Select your team...</option>';
+                
+                groups.forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group.id;
+                    option.textContent = group.name;
+                    groupSelect.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load groups:', error);
+        }
+    }
+
+    showAuthView() {
+        document.getElementById('authView').classList.add('active');
+        document.getElementById('mainApp').classList.remove('active');
+    }
+
+    showMainApp() {
+        document.getElementById('authView').classList.remove('active');
+        document.getElementById('mainApp').classList.add('active');
+        
+        // Update UI with user info
+        this.updateUserInfo();
+        
+        // Bind main app events
+        this.bindAppEvents();
+        
+        // Load reports and show main view
+        this.loadReports();
+        this.showReportsView();
+    }
+
+    updateUserInfo() {
+        if (this.currentUser) {
+            document.getElementById('userInfo').textContent = 
+                `${this.currentUser.firstName} ${this.currentUser.lastName}`;
+            
+            if (this.currentUser.groupName) {
+                document.getElementById('teamName').textContent = this.currentUser.groupName;
+            }
+        }
+    }
+
+    showLoginForm() {
+        document.getElementById('loginForm').classList.add('active');
+        document.getElementById('registerForm').classList.remove('active');
+    }
+
+    showRegisterForm() {
+        document.getElementById('registerForm').classList.add('active');
+        document.getElementById('loginForm').classList.remove('active');
+    }
+
+    async handleLogin() {
+        const form = document.getElementById('loginFormElement');
+        const formData = new FormData(form);
+        
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    email: formData.get('email'),
+                    password: formData.get('password')
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.currentUser = data.user;
+                this.showMainApp();
+                this.showSuccess('Login successful!');
+            } else {
+                this.showError(data.error || 'Login failed');
+            }
+        } catch (error) {
+            console.error('Login error:', error);
+            this.showError('Login failed. Please try again.');
+        }
+    }
+
+    async handleRegister() {
+        const form = document.getElementById('registerFormElement');
+        const formData = new FormData(form);
+        
+        try {
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    firstName: formData.get('firstName'),
+                    lastName: formData.get('lastName'),
+                    email: formData.get('email'),
+                    password: formData.get('password'),
+                    groupId: formData.get('groupId')
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.showSuccess('Registration successful! Please login.');
+                this.showLoginForm();
+                form.reset();
+            } else {
+                this.showError(data.error || 'Registration failed');
+            }
+        } catch (error) {
+            console.error('Registration error:', error);
+            this.showError('Registration failed. Please try again.');
+        }
+    }
+
+    async handleLogout() {
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                credentials: 'include'
+            });
+            
+            this.currentUser = null;
+            this.showAuthView();
+            this.showLoginForm();
+            
+            // Clear any cached data
+            this.reports = [];
+            this.currentReportId = null;
+            
+        } catch (error) {
+            console.error('Logout error:', error);
+            this.showError('Logout failed');
+        }
     }
 
     handleCheckboxGroup() {
@@ -96,9 +296,15 @@ class ScoutingApp {
     async loadReports() {
         try {
             this.showLoading('reportsList');
-            const response = await fetch('/api/reports');
+            const response = await fetch('/api/reports', {
+                credentials: 'include'
+            });
             
             if (!response.ok) {
+                if (response.status === 401) {
+                    this.showAuthView();
+                    return;
+                }
                 throw new Error('Failed to load reports');
             }
             
@@ -129,6 +335,8 @@ class ScoutingApp {
                 <h3>${report.player_name || 'Unnamed Player'}</h3>
                 <div class="report-meta">
                     ${this.formatDate(report.scout_date)} • ${report.team || 'No Team'}
+                    ${report.first_name && report.last_name ? 
+                        `<br>Scout: ${report.first_name} ${report.last_name}` : ''}
                 </div>
                 <div class="report-info">
                     <span class="position-badge">${report.primary_position || 'N/A'}</span>
@@ -183,8 +391,15 @@ class ScoutingApp {
             document.getElementById('formTitle').textContent = 'Edit Scouting Report';
             document.getElementById('deleteBtn').style.display = 'inline-block';
             
-            const response = await fetch(`/api/reports/${reportId}`);
+            const response = await fetch(`/api/reports/${reportId}`, {
+                credentials: 'include'
+            });
+            
             if (!response.ok) {
+                if (response.status === 401) {
+                    this.showAuthView();
+                    return;
+                }
                 throw new Error('Failed to load report');
             }
             
@@ -249,6 +464,12 @@ class ScoutingApp {
         // Set default date
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('scout_date').value = today;
+        
+        // Set scout name to current user if available
+        if (this.currentUser) {
+            document.getElementById('scout_name').value = 
+                `${this.currentUser.firstName} ${this.currentUser.lastName}`;
+        }
     }
 
     async saveReport() {
@@ -270,10 +491,15 @@ class ScoutingApp {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                credentials: 'include',
                 body: JSON.stringify(formData)
             });
             
             if (!response.ok) {
+                if (response.status === 401) {
+                    this.showAuthView();
+                    return;
+                }
                 throw new Error('Failed to save report');
             }
             
@@ -312,10 +538,15 @@ class ScoutingApp {
             document.getElementById('deleteBtn').disabled = true;
             
             const response = await fetch(`/api/reports/${this.currentReportId}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                credentials: 'include'
             });
             
             if (!response.ok) {
+                if (response.status === 401) {
+                    this.showAuthView();
+                    return;
+                }
                 throw new Error('Failed to delete report');
             }
             
@@ -431,7 +662,13 @@ class ScoutingApp {
         messageDiv.className = type;
         messageDiv.textContent = message;
         
-        const container = document.querySelector('.view.active');
+        // Find the active container
+        const authView = document.getElementById('authView');
+        const mainApp = document.getElementById('mainApp');
+        const container = authView.classList.contains('active') ? 
+            authView.querySelector('.auth-container') : 
+            document.querySelector('.view.active') || mainApp;
+        
         container.insertBefore(messageDiv, container.firstChild);
         
         // Auto-remove after 5 seconds
