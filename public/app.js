@@ -49,7 +49,10 @@ class ScoutingApp {
     updateRecommendedFocus() {
         const checkboxes = document.querySelectorAll('.checkbox-group input[type="checkbox"]:checked');
         const values = Array.from(checkboxes).map(cb => cb.value);
-        document.getElementById('recommended_focus').value = values.join(', ');
+        const focusField = document.getElementById('recommended_focus');
+        if (focusField) {
+            focusField.value = values.join(', ');
+        }
     }
 
     async loadReports() {
@@ -176,6 +179,12 @@ class ScoutingApp {
             checkboxes.forEach(checkbox => {
                 checkbox.checked = focusAreas.includes(checkbox.value);
             });
+            
+            // Update the hidden field
+            const focusField = document.getElementById('recommended_focus');
+            if (focusField) {
+                focusField.value = report.recommended_focus;
+            }
         }
         
         // Format dates properly
@@ -299,7 +308,10 @@ class ScoutingApp {
         
         // Handle recommended focus areas
         this.updateRecommendedFocus();
-        formData.recommended_focus = document.getElementById('recommended_focus').value;
+        const focusField = document.getElementById('recommended_focus');
+        if (focusField) {
+            formData.recommended_focus = focusField.value;
+        }
         
         return formData;
     }
