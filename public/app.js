@@ -26,6 +26,9 @@ class ScoutingApp {
         // Form validation
         document.getElementById('scoutingForm').addEventListener('input', () => this.validateForm());
         
+        // Auto-calculate age when date of birth changes
+        document.getElementById('date_of_birth').addEventListener('change', () => this.calculateAge());
+        
         // Auto-save draft every 30 seconds
         setInterval(() => this.saveDraft(), 30000);
         
@@ -52,6 +55,41 @@ class ScoutingApp {
         const focusField = document.getElementById('recommended_focus');
         if (focusField) {
             focusField.value = values.join(', ');
+        }
+    }
+
+    calculateAge() {
+        const dobInput = document.getElementById('date_of_birth');
+        const ageInput = document.getElementById('age');
+        
+        if (!dobInput.value) {
+            ageInput.value = '';
+            return;
+        }
+        
+        const birthDate = new Date(dobInput.value);
+        const today = new Date();
+        
+        // Calculate age
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        
+        // Adjust if birthday hasn't occurred this year yet
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        
+        // Only set age if it's reasonable (between 0 and 18 for youth baseball)
+        if (age >= 0 && age <= 18) {
+            ageInput.value = age;
+            
+            // Add a subtle visual feedback
+            ageInput.style.backgroundColor = '#e8f5e8';
+            setTimeout(() => {
+                ageInput.style.backgroundColor = '';
+            }, 1000);
+        } else {
+            ageInput.value = '';
         }
     }
 
