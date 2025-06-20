@@ -19,10 +19,19 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Update scouting_reports table to include user_id
-ALTER TABLE scouting_reports ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
-ALTER TABLE scouting_reports ADD COLUMN IF NOT EXISTS group_id INTEGER REFERENCES groups(id);
+-- Create session table for connect-pg-simple
+CREATE TABLE IF NOT EXISTS session (
+    sid VARCHAR NOT NULL COLLATE "default",
+    sess JSON NOT NULL,
+    expire TIMESTAMP(6) NOT NULL
+) WITH (OIDS=FALSE);
 
+ALTER TABLE session DROP CONSTRAINT IF EXISTS session_pkey;
+ALTER TABLE session ADD CONSTRAINT session_pkey PRIMARY KEY (sid) NOT DEFERRABLE INITIALLY IMMEDIATE;
+
+CREATE INDEX IF NOT EXISTS IDX_session_expire ON session(expire);
+
+-- Create scouting_reports table (including user_id and group_id from the start)
 CREATE TABLE IF NOT EXISTS scouting_reports (
     id SERIAL PRIMARY KEY,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -141,7 +150,7 @@ INSERT INTO groups (name, description) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert a sample admin user (password is 'admin123')
--- Password hash for 'admin123' using bcrypt
+-- Password hash for 'admin123' using bcrypt with 10 rounds
 INSERT INTO users (email, password_hash, first_name, last_name, group_id) VALUES 
     ('admin@demo.com', '$2b$10$rOzJsm7UzGkVxwjN7j4xZe5fv8v6w.Ac0xCEe5HdF3/1FHi3q9KJO', 'Admin', 'User', 1)
 ON CONFLICT (email) DO NOTHING;
