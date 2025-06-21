@@ -81,6 +81,24 @@ const requireAuth = (req, res, next) => {
     }
 };
 
+// Admin middleware
+const requireAdmin = (req, res, next) => {
+    if (req.session && req.session.userId && req.session.isAdmin) {
+        return next();
+    } else {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+};
+
+// Approved user middleware
+const requireApproved = (req, res, next) => {
+    if (req.session && req.session.userId && req.session.isApproved) {
+        return next();
+    } else {
+        return res.status(403).json({ error: 'Account pending approval' });
+    }
+};
+
 // Authentication Routes
 
 // Login
@@ -94,7 +112,7 @@ app.post('/api/auth/login', async (req, res) => {
         
         const userQuery = `
             SELECT u.id, u.email, u.password_hash, u.first_name, u.last_name, 
-                   u.group_id, g.name as group_name
+                   u.group_id, u.is_approved, u.is_admin, g.name as group_name
             FROM users u 
             LEFT JOIN groups g ON u.group_id = g.id 
             WHERE u.email = $1 AND u.is_active = true
@@ -113,11 +131,21 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
         
+        // Check if user is approved
+        if (!user.is_approved) {
+            return res.status(403).json({ 
+                error: 'Account pending approval', 
+                message: 'Your account is waiting for admin approval. Please contact your team administrator.'
+            });
+        }
+        
         // Set session
         req.session.userId = user.id;
         req.session.userEmail = user.email;
         req.session.groupId = user.group_id;
         req.session.groupName = user.group_name;
+        req.session.isApproved = user.is_approved;
+        req.session.isAdmin = user.is_admin;
         
         res.json({
             message: 'Login successful',
@@ -127,7 +155,9 @@ app.post('/api/auth/login', async (req, res) => {
                 firstName: user.first_name,
                 lastName: user.last_name,
                 groupId: user.group_id,
-                groupName: user.group_name
+                groupName: user.group_name,
+                isApproved: user.is_approved,
+                isAdmin: user.is_admin
             }
         });
         
@@ -140,9 +170,9 @@ app.post('/api/auth/login', async (req, res) => {
 // Register
 app.post('/api/auth/register', async (req, res) => {
     try {
-        const { email, password, firstName, lastName, groupId } = req.body;
+        const { email, password, firstName, lastName, groupId, registrationCode } = req.body;
         
-        if (!email || !password || !firstName || !lastName) {
+        if (!email || !password || !firstName || !lastName || !groupId) {
             return res.status(400).json({ error: 'All fields are required' });
         }
         
@@ -156,42 +186,63 @@ app.post('/api/auth/register', async (req, res) => {
             return res.status(400).json({ error: 'Email already registered' });
         }
         
+        // Get group details and check registration requirements
+        const groupQuery = `
+            SELECT id, name, registration_code, allow_public_registration 
+            FROM groups WHERE id = $1
+        `;
+        const groupResult = await pool.query(groupQuery, [groupId]);
+        
+        if (groupResult.rows.length === 0) {
+            return res.status(400).json({ error: 'Invalid team selected' });
+        }
+        
+        const group = groupResult.rows[0];
+        
+        // Check if registration code is required and valid
+        if (group.registration_code && group.registration_code !== registrationCode) {
+            return res.status(400).json({ 
+                error: 'Invalid registration code for this team',
+                requiresCode: true
+            });
+        }
+        
+        // Determine if user should be auto-approved
+        const isAutoApproved = group.allow_public_registration || false;
+        
         // Hash password
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
         
         // Insert user
         const insertQuery = `
-            INSERT INTO users (email, password_hash, first_name, last_name, group_id)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, email, first_name, last_name, group_id
+            INSERT INTO users (email, password_hash, first_name, last_name, group_id, is_approved)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, email, first_name, last_name, group_id, is_approved
         `;
         
         const result = await pool.query(insertQuery, [
-            email.toLowerCase(), passwordHash, firstName, lastName, groupId || null
+            email.toLowerCase(), passwordHash, firstName, lastName, groupId, isAutoApproved
         ]);
         
         const user = result.rows[0];
         
-        // Get group name
-        let groupName = null;
-        if (user.group_id) {
-            const groupResult = await pool.query('SELECT name FROM groups WHERE id = $1', [user.group_id]);
-            if (groupResult.rows.length > 0) {
-                groupName = groupResult.rows[0].name;
-            }
-        }
+        const message = user.is_approved 
+            ? 'Registration successful! You can now login.'
+            : 'Registration successful! Your account is pending admin approval.';
         
         res.json({
-            message: 'Registration successful',
+            message: message,
             user: {
                 id: user.id,
                 email: user.email,
                 firstName: user.first_name,
                 lastName: user.last_name,
                 groupId: user.group_id,
-                groupName: groupName
-            }
+                groupName: group.name,
+                isApproved: user.is_approved
+            },
+            requiresApproval: !user.is_approved
         });
         
     } catch (err) {
@@ -218,7 +269,7 @@ app.get('/api/auth/me', async (req, res) => {
     
     try {
         const userQuery = `
-            SELECT u.id, u.email, u.first_name, u.last_name, u.group_id, g.name as group_name
+            SELECT u.id, u.email, u.first_name, u.last_name, u.group_id, u.is_approved, u.is_admin, g.name as group_name
             FROM users u 
             LEFT JOIN groups g ON u.group_id = g.id 
             WHERE u.id = $1 AND u.is_active = true
@@ -232,6 +283,11 @@ app.get('/api/auth/me', async (req, res) => {
         }
         
         const user = result.rows[0];
+        
+        // Update session with current user status
+        req.session.isApproved = user.is_approved;
+        req.session.isAdmin = user.is_admin;
+        
         res.json({
             user: {
                 id: user.id,
@@ -239,7 +295,9 @@ app.get('/api/auth/me', async (req, res) => {
                 firstName: user.first_name,
                 lastName: user.last_name,
                 groupId: user.group_id,
-                groupName: user.group_name
+                groupName: user.group_name,
+                isApproved: user.is_approved,
+                isAdmin: user.is_admin
             }
         });
         
@@ -249,10 +307,15 @@ app.get('/api/auth/me', async (req, res) => {
     }
 });
 
-// Get available groups
+// Get available groups (updated to include registration requirements)
 app.get('/api/groups', async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, name, description FROM groups ORDER BY name');
+        const result = await pool.query(`
+            SELECT id, name, description, 
+                   CASE WHEN registration_code IS NOT NULL THEN true ELSE false END as requires_code
+            FROM groups 
+            ORDER BY name
+        `);
         res.json(result.rows);
     } catch (err) {
         console.error('Groups fetch error:', err);
@@ -260,10 +323,133 @@ app.get('/api/groups', async (req, res) => {
     }
 });
 
-// Protected Routes (require authentication)
+// Admin Routes
+
+// Get pending users for approval
+app.get('/api/admin/pending-users', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const query = `
+            SELECT u.id, u.email, u.first_name, u.last_name, u.created_at, g.name as group_name
+            FROM users u
+            LEFT JOIN groups g ON u.group_id = g.id
+            WHERE u.is_approved = false AND u.is_active = true
+            ORDER BY u.created_at DESC
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Pending users fetch error:', err);
+        res.status(500).json({ error: 'Failed to fetch pending users' });
+    }
+});
+
+// Approve/deny user
+app.post('/api/admin/approve-user/:userId', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { approved } = req.body;
+        
+        if (approved) {
+            await pool.query('UPDATE users SET is_approved = true WHERE id = $1', [userId]);
+            res.json({ message: 'User approved successfully' });
+        } else {
+            await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+            res.json({ message: 'User registration denied and removed' });
+        }
+    } catch (err) {
+        console.error('User approval error:', err);
+        res.status(500).json({ error: 'Failed to process user approval' });
+    }
+});
+
+// Get team management info (for admins)
+app.get('/api/admin/teams', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const query = `
+            SELECT g.id, g.name, g.description, g.registration_code, g.allow_public_registration,
+                   COUNT(u.id) as member_count
+            FROM groups g
+            LEFT JOIN users u ON g.id = u.group_id AND u.is_active = true AND u.is_approved = true
+            GROUP BY g.id, g.name, g.description, g.registration_code, g.allow_public_registration
+            ORDER BY g.name
+        `;
+        const result = await pool.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Teams fetch error:', err);
+        res.status(500).json({ error: 'Failed to fetch teams' });
+    }
+});
+
+// Update team settings
+app.put('/api/admin/teams/:teamId', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { teamId } = req.params;
+        const { name, description, registrationCode, allowPublicRegistration } = req.body;
+        
+        const query = `
+            UPDATE groups 
+            SET name = $1, description = $2, registration_code = $3, allow_public_registration = $4
+            WHERE id = $5
+        `;
+        
+        await pool.query(query, [name, description, registrationCode || null, allowPublicRegistration, teamId]);
+        res.json({ message: 'Team updated successfully' });
+    } catch (err) {
+        console.error('Team update error:', err);
+        res.status(500).json({ error: 'Failed to update team' });
+    }
+});
+
+// Create new team
+app.post('/api/admin/teams', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { name, description, registrationCode, allowPublicRegistration } = req.body;
+        
+        if (!name) {
+            return res.status(400).json({ error: 'Team name is required' });
+        }
+        
+        const query = `
+            INSERT INTO groups (name, description, registration_code, allow_public_registration)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, name
+        `;
+        
+        const result = await pool.query(query, [name, description, registrationCode || null, allowPublicRegistration]);
+        res.json({ message: 'Team created successfully', team: result.rows[0] });
+    } catch (err) {
+        if (err.code === '23505') { // Unique constraint violation
+            res.status(400).json({ error: 'Team name already exists' });
+        } else {
+            console.error('Team creation error:', err);
+            res.status(500).json({ error: 'Failed to create team' });
+        }
+    }
+});
+
+// Get team members
+app.get('/api/admin/teams/:teamId/members', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { teamId } = req.params;
+        const query = `
+            SELECT u.id, u.email, u.first_name, u.last_name, u.is_approved, u.is_admin, u.created_at
+            FROM users u
+            WHERE u.group_id = $1 AND u.is_active = true
+            ORDER BY u.last_name, u.first_name
+        `;
+        const result = await pool.query(query, [teamId]);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Team members fetch error:', err);
+        res.status(500).json({ error: 'Failed to fetch team members' });
+    }
+});
+
+// Protected Routes (require authentication and approval)
 
 // Get all scouting reports (filtered by user's group)
-app.get('/api/reports', requireAuth, async (req, res) => {
+app.get('/api/reports', requireAuth, requireApproved, async (req, res) => {
     try {
         const query = `
             SELECT sr.id, sr.player_name, sr.primary_position, sr.team, sr.scout_date, sr.created_at,
@@ -283,7 +469,7 @@ app.get('/api/reports', requireAuth, async (req, res) => {
 });
 
 // Get single scouting report (must be in same group)
-app.get('/api/reports/:id', requireAuth, async (req, res) => {
+app.get('/api/reports/:id', requireAuth, requireApproved, async (req, res) => {
     try {
         const query = `
             SELECT * FROM scouting_reports 
@@ -302,7 +488,7 @@ app.get('/api/reports/:id', requireAuth, async (req, res) => {
 });
 
 // Create new scouting report
-app.post('/api/reports', requireAuth, async (req, res) => {
+app.post('/api/reports', requireAuth, requireApproved, async (req, res) => {
     const data = req.body;
     
     try {
@@ -310,7 +496,7 @@ app.post('/api/reports', requireAuth, async (req, res) => {
         
         // Add user_id and group_id to the fields and data
         const fieldsWithUser = ['user_id', 'group_id', ...DB_FIELDS];
-        const placeholders = fieldsWithUser.map((_, index) => `$${index + 1}`).join(', ');
+        const placeholders = fieldsWithUser.map((_, index) => `${index + 1}`).join(', ');
         
         const query = `
             INSERT INTO scouting_reports (${fieldsWithUser.join(', ')}) 
@@ -344,7 +530,7 @@ app.post('/api/reports', requireAuth, async (req, res) => {
 });
 
 // Update scouting report (must be in same group)
-app.put('/api/reports/:id', requireAuth, async (req, res) => {
+app.put('/api/reports/:id', requireAuth, requireApproved, async (req, res) => {
     const data = req.body;
     const reportId = req.params.id;
     
@@ -362,13 +548,13 @@ app.put('/api/reports/:id', requireAuth, async (req, res) => {
         
         console.log('Updating report with fields:', DB_FIELDS.length);
         
-        const setClause = DB_FIELDS.map((field, index) => `${field} = $${index + 1}`).join(', ');
+        const setClause = DB_FIELDS.map((field, index) => `${field} = ${index + 1}`).join(', ');
         
         const query = `
             UPDATE scouting_reports SET
                 ${setClause},
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = $${DB_FIELDS.length + 1}
+            WHERE id = ${DB_FIELDS.length + 1}
         `;
         
         const values = DB_FIELDS.map(field => {
@@ -399,7 +585,7 @@ app.put('/api/reports/:id', requireAuth, async (req, res) => {
 });
 
 // Delete scouting report (must be in same group)
-app.delete('/api/reports/:id', requireAuth, async (req, res) => {
+app.delete('/api/reports/:id', requireAuth, requireApproved, async (req, res) => {
     try {
         const query = `
             DELETE FROM scouting_reports 

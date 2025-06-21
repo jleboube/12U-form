@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS groups (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     description TEXT,
+    registration_code VARCHAR(50) UNIQUE,
+    allow_public_registration BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -15,6 +17,8 @@ CREATE TABLE IF NOT EXISTS users (
     last_name VARCHAR(100),
     group_id INTEGER REFERENCES groups(id),
     is_active BOOLEAN DEFAULT true,
+    is_approved BOOLEAN DEFAULT false,
+    is_admin BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -142,18 +146,15 @@ CREATE INDEX IF NOT EXISTS idx_group_id ON scouting_reports(group_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_group ON users(group_id);
 
--- Insert some sample groups
-INSERT INTO groups (name, description) VALUES 
-    ('Demo Team', 'Demo team for testing'),
-    ('MTown Rampage 12U Baseball', 'MTown 12U Team'),
-    ('MTown Rampage 11U Baseball', 'MTown 11U Team'),
-    ('MTown Rampage 10U Baseball', 'MTown 10U Team'),
-    ('Lions Baseball', 'TEST Lions youth baseball team'),
-    ('Eagles Baseball', 'TEST Eagles youth baseball team')
+-- Insert some sample groups with registration codes
+INSERT INTO groups (name, description, registration_code, allow_public_registration) VALUES 
+    ('Demo Team', 'Demo team for testing', 'DEMO2024', true),
+    ('MTown Rampage 12U Baseball', 'Rampage 12U youth baseball team', 'RAMPAGE2025', false),
+    ('MTown Drillers 11U Baseball', 'Drillers 11U youth baseball team', 'DRILLERS2025', false)
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert a sample admin user (password is 'admin123')
 -- Password hash for 'admin123' using bcrypt with 10 rounds
-INSERT INTO users (email, password_hash, first_name, last_name, group_id) VALUES 
-    ('admin@demo.com', '$2b$10$rOzJsm7UzGkVxwjN7j4xZe5fv8v6w.Ac0xCEe5HdF3/1FHi3q9KJO', 'Admin', 'User', 1)
+INSERT INTO users (email, password_hash, first_name, last_name, group_id, is_approved, is_admin) VALUES 
+    ('admin@demo.com', '$2b$10$rOzJsm7UzGkVxwjN7j4xZe5fv8v6w.Ac0xCEe5HdF3/1FHi3q9KJO', 'Admin', 'User', 1, true, true)
 ON CONFLICT (email) DO NOTHING;

@@ -194,6 +194,190 @@ header {
     white-space: nowrap;
 }
 
+/* Admin Panel Styles */
+.admin-tabs {
+    display: flex;
+    border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 2rem;
+}
+
+.admin-tab-btn {
+    background: none;
+    border: none;
+    padding: 1rem 2rem;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #7f8c8d;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.admin-tab-btn.active {
+    color: #2c3e50;
+    border-bottom-color: #3498db;
+    background: rgba(52, 152, 219, 0.1);
+}
+
+.admin-tab-btn:hover {
+    background: rgba(52, 152, 219, 0.05);
+}
+
+.admin-tab-content {
+    display: none;
+}
+
+.admin-tab-content.active {
+    display: block;
+}
+
+.admin-section {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.pending-user-card, .team-card {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+}
+
+.pending-user-card:hover, .team-card:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.user-info-header, .team-info-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.user-name, .team-name {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.user-email, .team-details {
+    color: #7f8c8d;
+    font-size: 0.9rem;
+}
+
+.approval-actions, .team-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-approve {
+    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    color: white;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.btn-deny {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.team-code {
+    background: #3498db;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-left: 1rem;
+}
+
+.no-pending-users, .no-teams {
+    text-align: center;
+    padding: 3rem;
+    color: #7f8c8d;
+}
+
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-pending {
+    background: #f39c12;
+    color: white;
+}
+
+.status-approved {
+    background: #27ae60;
+    color: white;
+}
+
+.team-settings {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.setting-label {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.setting-value {
+    color: #7f8c8d;
+}
+
+/* Pending Approval Banner */
+.pending-approval-banner {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    color: white;
+    padding: 1rem 2rem;
+    margin-bottom: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(243, 156, 18, 0.3);
+}
+
+.approval-message {
+    text-align: center;
+}
+
+.approval-message strong {
+    display: block;
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+}
+
+.approval-message p {
+    margin: 0;
+    opacity: 0.9;
+}
+
 h1 {
     font-size: 2rem;
     font-weight: 700;
