@@ -1,182 +1,131 @@
-# Simple Production Setup with Nginx Proxy Manager
+# Simple Team Registration with Codes
 
-## Quick Setup (5 minutes)
+## Quick Setup
 
-### 1. Prepare Your Files
+### 1. Configure Environment
 ```bash
-# Copy environment template and update values
 cp .env.production .env
-nano .env  # Change the passwords and domain
-
-# Generate secure values if needed:
-openssl rand -base64 32  # For DB_PASSWORD
-openssl rand -base64 48  # For SESSION_SECRET
+nano .env  # Update passwords and domain
 ```
 
-### 2. Point Your Domain to Server
-Configure your DNS:
-```
-A    scouting-report.com        → YOUR_SERVER_IP
-A    www.scouting-report.com    → YOUR_SERVER_IP
-```
-
-### 3. Start the Application
+### 2. Deploy
 ```bash
-# Start all services
-docker-compose -f docker-compose.prod.yml up -d
-
-# Check everything is running
-docker-compose -f docker-compose.prod.yml ps
+chmod +x *.sh
+./deploy.sh
 ```
 
-### 4. Configure Nginx Proxy Manager (Web UI)
+### 3. Configure Domain & SSL
+- Access Nginx Proxy Manager: `http://YOUR_IP:81`
+- Login: `admin@example.com` / `changeme` (change immediately!)
+- Add proxy host for your domain pointing to `app:3000`
+- Request SSL certificate
 
-#### Access the Admin Panel
-- Open: `http://YOUR_SERVER_IP:81`
-- **Default Login:**
-  - Email: `admin@example.com`
-  - Password: `changeme`
-- **Change these credentials immediately!**
+### 4. Test Registration
+Visit your site and try registering with these team codes:
+- **Demo Team**: Use code `DEMO2024`
+- **Lions Baseball**: Use code `LIONS2024`  
+- **Eagles Baseball**: Use code `EAGLES2024`
 
-#### Add Your Domain
-1. **Go to "Proxy Hosts"** → Click **"Add Proxy Host"**
+## How Team Registration Works
 
-2. **Details Tab:**
-   - **Domain Names:** `scouting-report.com`, `www.scouting-report.com`
-   - **Scheme:** `http`
-   - **Forward Hostname/IP:** `app` (the Docker service name)
-   - **Forward Port:** `3000`
-   - ✅ **Cache Assets**
-   - ✅ **Block Common Exploits**
-   - ✅ **Websockets Support**
+### Registration Process
+1. User selects a team from dropdown
+2. User enters the team's registration code
+3. Code is validated against the database
+4. If valid, user is registered and can access team's scouting reports
+5. If invalid, registration is rejected
 
-3. **SSL Tab:**
-   - ✅ **SSL Certificate:** Request a new SSL Certificate
-   - ✅ **Force SSL**
-   - ✅ **HTTP/2 Support**
-   - **Email:** Your email for Let's Encrypt
-   - ✅ **I Agree to the Let's Encrypt Terms of Service**
+### Team Codes
+Each team has a unique registration code:
+- **Demo Team**: `DEMO2024`
+- **Lions Baseball**: `LIONS2024`
+- **Eagles Baseball**: `EAGLES2024`
 
-4. **Click "Save"**
+### Security
+- Users can only see scouting reports from their own team
+- Registration codes prevent unauthorized team access
+- No admin approval needed - just the correct code
 
-### 5. Test Your Site
-- Visit: `https://scouting-report.com`
-- Should redirect to HTTPS and show login page
-- Login with: `admin@demo.com` / `admin123`
+## Managing Teams
 
-## That's It! 🎉
+### View Current Teams
+```bash
+docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -d baseball_scouting -c "SELECT id, name, registration_code FROM groups;"
+```
 
-Your site is now running with:
-- ✅ SSL Certificate (auto-renewed)
-- ✅ HTTPS redirect
-- ✅ Reverse proxy
-- ✅ Security headers
-- ✅ Professional setup
+### Add New Team
+```bash
+docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -d baseball_scouting -c "INSERT INTO groups (name, description, registration_code) VALUES ('Team Name', 'Description', 'TEAMCODE2024');"
+```
+
+### Change Team Code
+```bash
+docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -d baseball_scouting -c "UPDATE groups SET registration_code = 'NEWCODE2024' WHERE name = 'Team Name';"
+```
+
+## Testing
+
+### Test with Demo Account
+- Login: `admin@demo.com` / `admin123`
+- This account is already registered to Demo Team
+
+### Test Registration
+1. Go to registration page
+2. Fill out form
+3. Select "Demo Team"
+4. Enter code: `DEMO2024`
+5. Should register successfully
 
 ## Management Commands
 
 ### View Application Status
 ```bash
-# Check all services
 docker-compose -f docker-compose.prod.yml ps
+```
 
-# View application logs
+### View Logs
+```bash
 docker-compose -f docker-compose.prod.yml logs app
-
-# View database logs
-docker-compose -f docker-compose.prod.yml logs db
 ```
 
 ### Backup Database
 ```bash
-# Create backup
-docker-compose -f docker-compose.prod.yml exec db pg_dump -U scout_user baseball_scouting > backup_$(date +%Y%m%d).sql
-
-# Restore backup
-cat backup_20241220.sql | docker-compose -f docker-compose.prod.yml exec -T db psql -U scout_user -d baseball_scouting
+./backup_database.sh
 ```
 
 ### Update Application
 ```bash
-# Pull latest changes
-git pull
-
-# Rebuild and restart
-docker-compose -f docker-compose.prod.yml up --build -d
+./update.sh
 ```
-
-### Restart Services
-```bash
-# Restart everything
-docker-compose -f docker-compose.prod.yml restart
-
-# Restart just the app
-docker-compose -f docker-compose.prod.yml restart app
-```
-
-## Nginx Proxy Manager Features
-
-### Access Control (Optional)
-- Add **Access Lists** to restrict access by IP
-- Set up **basic authentication** for extra security
-
-### SSL Certificate Management
-- Certificates auto-renew every 60 days
-- View expiration dates in **SSL Certificates** tab
-- Force renewal if needed
-
-### Monitoring
-- **View logs** in the web interface
-- **Check certificate status**
-- **Monitor proxy host health**
-
-## Troubleshooting
-
-### Site Not Loading
-1. Check DNS propagation: `nslookup scouting-report.com`
-2. Verify containers: `docker-compose -f docker-compose.prod.yml ps`
-3. Check app logs: `docker-compose -f docker-compose.prod.yml logs app`
-
-### SSL Issues
-1. Check domain DNS points to your server
-2. Verify port 80 and 443 are open
-3. Try regenerating certificate in Nginx Proxy Manager
-
-### Database Connection Issues
-1. Check database logs: `docker-compose -f docker-compose.prod.yml logs db`
-2. Verify environment variables in `.env`
-3. Restart database: `docker-compose -f docker-compose.prod.yml restart db`
-
-### Can't Access Admin Panel (Port 81)
-```bash
-# Check if port 81 is open on your server
-sudo ufw allow 81
-
-# Or use SSH tunnel if port is blocked
-ssh -L 8081:localhost:81 user@your-server
-# Then access http://localhost:8081
-```
-
-## Security Notes
-
-1. **Change default admin credentials** in Nginx Proxy Manager immediately
-2. **Use strong passwords** in your `.env` file
-3. **Keep Docker images updated** regularly
-4. **Monitor access logs** in Nginx Proxy Manager
-5. **Consider adding access control** for admin areas
 
 ## File Structure
 ```
 baseball-scouting-app/
-├── docker-compose.prod.yml    # Main Docker setup
-├── .env                       # Your environment variables
-├── init.sql                   # Database schema
-├── server.js                  # Application server
-├── public/                    # Web files
-│   ├── index.html
-│   ├── app.js
-│   └── styles.css
-└── backups/                   # Database backups (created automatically)
+├── docker-compose.prod.yml    # Production setup
+├── .env                       # Your configuration
+├── server.js                  # Application with team code validation
+├── init.sql                   # Database with teams and codes
+└── public/                    # Web interface with registration form
 ```
 
-This setup is much simpler than traditional nginx configurations and provides all the same benefits through an easy web interface!
+## Troubleshooting
+
+### Teams not loading in dropdown?
+```bash
+# Check database connection
+docker-compose -f docker-compose.prod.yml logs app
+
+# Verify teams exist
+docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -d baseball_scouting -c "SELECT * FROM groups;"
+```
+
+### Registration failing?
+- Check that team code exactly matches (case sensitive)
+- Verify team exists in database
+- Check application logs for errors
+
+### Can't see other team's reports?
+- This is correct! Users can only see their own team's reports
+- Each user is isolated to their registered team
+
+This simple system provides team security through registration codes without complex admin panels or approval workflows.

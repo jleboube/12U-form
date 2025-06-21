@@ -39,11 +39,6 @@ class ScoutingApp {
             this.handleLogout();
         });
         
-        // Team selection change (for registration code)
-        document.getElementById('registerGroup').addEventListener('change', (e) => {
-            this.handleTeamSelection(e.target.value);
-        });
-        
         // Load groups for registration
         this.loadGroups();
     }
@@ -52,10 +47,6 @@ class ScoutingApp {
         // Navigation
         document.getElementById('newReportBtn').addEventListener('click', () => this.showNewReportForm());
         document.getElementById('backBtn').addEventListener('click', () => this.showReportsView());
-        
-        // Admin navigation
-        document.getElementById('adminBtn').addEventListener('click', () => this.showAdminView());
-        document.getElementById('adminBackBtn').addEventListener('click', () => this.showReportsView());
         
         // Form actions
         document.getElementById('saveBtn').addEventListener('click', () => this.saveReport());
@@ -75,11 +66,6 @@ class ScoutingApp {
         
         // Handle checkbox groups for recommended focus
         this.handleCheckboxGroup();
-        
-        // Admin tabs
-        document.querySelectorAll('.admin-tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchAdminTab(e.target.dataset.tab));
-        });
         
         // Set default date to today
         const today = new Date().toISOString().split('T')[0];
@@ -113,39 +99,15 @@ class ScoutingApp {
                 const groupSelect = document.getElementById('registerGroup');
                 groupSelect.innerHTML = '<option value="">Select your team...</option>';
                 
-                this.groups = groups; // Store for later use
-                
                 groups.forEach(group => {
                     const option = document.createElement('option');
                     option.value = group.id;
                     option.textContent = group.name;
-                    option.dataset.requiresCode = group.requires_code;
                     groupSelect.appendChild(option);
                 });
             }
         } catch (error) {
             console.error('Failed to load groups:', error);
-        }
-    }
-
-    handleTeamSelection(groupId) {
-        const codeGroup = document.getElementById('registrationCodeGroup');
-        const codeInput = document.getElementById('registrationCode');
-        
-        if (groupId) {
-            const selectedGroup = this.groups?.find(g => g.id == groupId);
-            if (selectedGroup && selectedGroup.requires_code) {
-                codeGroup.style.display = 'block';
-                codeInput.required = true;
-            } else {
-                codeGroup.style.display = 'none';
-                codeInput.required = false;
-                codeInput.value = '';
-            }
-        } else {
-            codeGroup.style.display = 'none';
-            codeInput.required = false;
-            codeInput.value = '';
         }
     }
 
@@ -177,34 +139,7 @@ class ScoutingApp {
             if (this.currentUser.groupName) {
                 document.getElementById('teamName').textContent = this.currentUser.groupName;
             }
-            
-            // Show admin button for admin users
-            const adminBtn = document.getElementById('adminBtn');
-            if (this.currentUser.isAdmin) {
-                adminBtn.style.display = 'inline-block';
-            } else {
-                adminBtn.style.display = 'none';
-            }
-            
-            // Handle unapproved users
-            if (!this.currentUser.isApproved) {
-                this.showPendingApprovalMessage();
-            }
         }
-    }
-
-    showPendingApprovalMessage() {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'pending-approval-banner';
-        messageDiv.innerHTML = `
-            <div class="approval-message">
-                <strong>⏳ Account Pending Approval</strong>
-                <p>Your account is waiting for admin approval. You cannot create or view scouting reports until approved.</p>
-            </div>
-        `;
-        
-        const mainApp = document.getElementById('mainApp');
-        mainApp.insertBefore(messageDiv, mainApp.firstChild);
     }
 
     showLoginForm() {
@@ -273,22 +208,11 @@ class ScoutingApp {
             const data = await response.json();
             
             if (response.ok) {
-                if (data.requiresApproval) {
-                    this.showSuccess('Registration successful! Your account is pending admin approval. Please contact your team administrator.');
-                } else {
-                    this.showSuccess('Registration successful! You can now login.');
-                }
+                this.showSuccess('Registration successful! You can now login.');
                 this.showLoginForm();
                 form.reset();
-                this.handleTeamSelection(''); // Reset registration code visibility
             } else {
                 this.showError(data.error || 'Registration failed');
-                
-                // If registration code is required, show the field
-                if (data.requiresCode) {
-                    document.getElementById('registrationCodeGroup').style.display = 'block';
-                    document.getElementById('registrationCode').required = true;
-                }
             }
         } catch (error) {
             console.error('Registration error:', error);
@@ -441,185 +365,10 @@ class ScoutingApp {
     showReportsView() {
         document.getElementById('reportsView').classList.add('active');
         document.getElementById('formView').classList.remove('active');
-        document.getElementById('adminView').classList.remove('active');
-        
-        // Only load reports if user is approved
-        if (this.currentUser && this.currentUser.isApproved) {
-            this.loadReports();
-        } else {
-            // Show message for unapproved users
-            const reportsContainer = document.getElementById('reportsList');
-            reportsContainer.innerHTML = `
-                <div class="no-reports">
-                    <h3>Account Pending Approval</h3>
-                    <p>You cannot view scouting reports until your account is approved by a team administrator.</p>
-                </div>
-            `;
-        }
-    }
-
-    showAdminView() {
-        document.getElementById('reportsView').classList.remove('active');
-        document.getElementById('formView').classList.remove('active');
-        document.getElementById('adminView').classList.add('active');
-        
-        // Load admin data
-        this.loadPendingUsers();
-        this.loadTeamsAdmin();
-    }
-
-    switchAdminTab(tabName) {
-        // Update tab buttons
-        document.querySelectorAll('.admin-tab-btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
-        
-        // Update tab content
-        document.querySelectorAll('.admin-tab-content').forEach(content => {
-            content.classList.remove('active');
-        });
-        document.getElementById(`${tabName}Tab`).classList.add('active');
-        
-        // Load appropriate data
-        if (tabName === 'pending') {
-            this.loadPendingUsers();
-        } else if (tabName === 'teams') {
-            this.loadTeamsAdmin();
-        }
-    }
-
-    async loadPendingUsers() {
-        try {
-            const response = await fetch('/api/admin/pending-users', {
-                credentials: 'include'
-            });
-            
-            if (response.ok) {
-                const users = await response.json();
-                this.renderPendingUsers(users);
-            } else {
-                console.error('Failed to load pending users');
-            }
-        } catch (error) {
-            console.error('Error loading pending users:', error);
-        }
-    }
-
-    renderPendingUsers(users) {
-        const container = document.getElementById('pendingUsersList');
-        
-        if (users.length === 0) {
-            container.innerHTML = `
-                <div class="no-pending-users">
-                    <h3>No pending approvals</h3>
-                    <p>All registered users have been approved.</p>
-                </div>
-            `;
-            return;
-        }
-        
-        container.innerHTML = users.map(user => `
-            <div class="pending-user-card">
-                <div class="user-info-header">
-                    <div>
-                        <div class="user-name">${user.first_name} ${user.last_name}</div>
-                        <div class="user-email">${user.email} • ${user.group_name}</div>
-                        <small>Registered: ${this.formatDate(user.created_at)}</small>
-                    </div>
-                    <div class="approval-actions">
-                        <button class="btn btn-approve" onclick="app.approveUser(${user.id}, true)">
-                            Approve
-                        </button>
-                        <button class="btn btn-deny" onclick="app.approveUser(${user.id}, false)">
-                            Deny
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    async approveUser(userId, approved) {
-        try {
-            const response = await fetch(`/api/admin/approve-user/${userId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-                body: JSON.stringify({ approved })
-            });
-            
-            if (response.ok) {
-                const message = approved ? 'User approved successfully!' : 'User registration denied and removed.';
-                this.showSuccess(message);
-                this.loadPendingUsers(); // Refresh the list
-            } else {
-                this.showError('Failed to process user approval');
-            }
-        } catch (error) {
-            console.error('Error processing user approval:', error);
-            this.showError('Failed to process user approval');
-        }
-    }
-
-    async loadTeamsAdmin() {
-        try {
-            const response = await fetch('/api/admin/teams', {
-                credentials: 'include'
-            });
-            
-            if (response.ok) {
-                const teams = await response.json();
-                this.renderTeamsAdmin(teams);
-            } else {
-                console.error('Failed to load teams');
-            }
-        } catch (error) {
-            console.error('Error loading teams:', error);
-        }
-    }
-
-    renderTeamsAdmin(teams) {
-        const container = document.getElementById('teamsList');
-        
-        container.innerHTML = teams.map(team => `
-            <div class="team-card">
-                <div class="team-info-header">
-                    <div>
-                        <div class="team-name">${team.name}</div>
-                        <div class="team-details">${team.description || 'No description'}</div>
-                        <small>${team.member_count} members</small>
-                    </div>
-                    <div class="team-actions">
-                        ${team.registration_code ? 
-                            `<span class="team-code">${team.registration_code}</span>` : 
-                            '<span class="status-badge">No Code Required</span>'
-                        }
-                    </div>
-                </div>
-                <div class="team-settings">
-                    <div class="setting-row">
-                        <span class="setting-label">Registration Code:</span>
-                        <span class="setting-value">${team.registration_code || 'None'}</span>
-                    </div>
-                    <div class="setting-row">
-                        <span class="setting-label">Public Registration:</span>
-                        <span class="setting-value">${team.allow_public_registration ? 'Enabled' : 'Disabled'}</span>
-                    </div>
-                </div>
-            </div>
-        `).join('');
+        this.loadReports();
     }
 
     showNewReportForm() {
-        // Check if user is approved
-        if (!this.currentUser || !this.currentUser.isApproved) {
-            this.showError('You cannot create reports until your account is approved.');
-            return;
-        }
-        
         this.currentReportId = null;
         document.getElementById('formTitle').textContent = 'New Scouting Report';
         document.getElementById('deleteBtn').style.display = 'none';
@@ -638,12 +387,6 @@ class ScoutingApp {
     }
 
     async editReport(reportId) {
-        // Check if user is approved
-        if (!this.currentUser || !this.currentUser.isApproved) {
-            this.showError('You cannot edit reports until your account is approved.');
-            return;
-        }
-        
         try {
             this.currentReportId = reportId;
             document.getElementById('formTitle').textContent = 'Edit Scouting Report';
@@ -863,24 +606,6 @@ class ScoutingApp {
 
     clearDraft() {
         localStorage.removeItem('scoutingDraft');
-    }
-
-    loadDraft() {
-        const draft = localStorage.getItem('scoutingDraft');
-        if (draft && !this.currentReportId) {
-            try {
-                const formData = JSON.parse(draft);
-                Object.keys(formData).forEach(key => {
-                    const element = document.getElementById(key);
-                    if (element && formData[key]) {
-                        element.value = formData[key];
-                    }
-                });
-                this.showSuccess('Draft loaded automatically');
-            } catch (error) {
-                console.error('Error loading draft:', error);
-            }
-        }
     }
 
     formatDate(dateString) {
