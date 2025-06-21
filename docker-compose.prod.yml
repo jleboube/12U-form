@@ -1,3 +1,4 @@
+version: '3.8'
 
 services:
   # Nginx Proxy Manager - Web UI for proxy and SSL management
@@ -21,7 +22,11 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://scout_user:${DB_PASSWORD:-scout_pass}@db:5432/baseball_scouting
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=baseball_scouting
+      - DB_USER=scout_user
+      - DB_PASSWORD=${DB_PASSWORD:-scout_pass}
       - NODE_ENV=production
       - SESSION_SECRET=${SESSION_SECRET:-change-this-in-production}
       - DOMAIN=${DOMAIN:-scouting-report.com}

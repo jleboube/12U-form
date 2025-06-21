@@ -12,7 +12,11 @@ const port = process.env.PORT || 3000;
 
 // Database connection
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || 'postgresql://scout_user:scout_pass@localhost:5432/baseball_scouting'
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    database: process.env.DB_NAME || 'baseball_scouting',
+    user: process.env.DB_USER || 'scout_user',
+    password: process.env.DB_PASSWORD || 'scout_pass',
 });
 
 // Middleware

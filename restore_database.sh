@@ -32,14 +32,14 @@ docker-compose -f docker-compose.prod.yml stop app
 echo "🗄️  Restoring database..."
 
 # Drop and recreate database
-docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -c "DROP DATABASE IF EXISTS baseball_scouting;"
-docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -c "CREATE DATABASE baseball_scouting;"
+docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -h localhost -c "DROP DATABASE IF EXISTS baseball_scouting;"
+docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -h localhost -c "CREATE DATABASE baseball_scouting;"
 
 # Restore from backup
 if [[ "$BACKUP_FILE" == *.gz ]]; then
-    gunzip -c "$BACKUP_FILE" | docker-compose -f docker-compose.prod.yml exec -T db psql -U scout_user -d baseball_scouting
+    gunzip -c "$BACKUP_FILE" | docker-compose -f docker-compose.prod.yml exec -T db psql -U scout_user -h localhost -d baseball_scouting
 else
-    cat "$BACKUP_FILE" | docker-compose -f docker-compose.prod.yml exec -T db psql -U scout_user -d baseball_scouting
+    cat "$BACKUP_FILE" | docker-compose -f docker-compose.prod.yml exec -T db psql -U scout_user -h localhost -d baseball_scouting
 fi
 
 if [ $? -eq 0 ]; then

@@ -11,8 +11,15 @@ mkdir -p "$BACKUP_DIR"
 
 echo "💾 Creating database backup..."
 
+# Check if containers are running
+if ! docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+    echo "❌ Containers are not running. Starting them..."
+    docker-compose -f docker-compose.prod.yml up -d
+    sleep 10
+fi
+
 # Create database backup
-if docker-compose -f docker-compose.prod.yml exec -T db pg_dump -U scout_user baseball_scouting > "$BACKUP_DIR/$BACKUP_FILE"; then
+if docker-compose -f docker-compose.prod.yml exec -T db pg_dump -U scout_user -h localhost baseball_scouting > "$BACKUP_DIR/$BACKUP_FILE"; then
     # Compress the backup
     gzip "$BACKUP_DIR/$BACKUP_FILE"
     echo "✅ Backup created: $BACKUP_DIR/${BACKUP_FILE}.gz"
@@ -24,5 +31,7 @@ if docker-compose -f docker-compose.prod.yml exec -T db pg_dump -U scout_user ba
     ls -lah "$BACKUP_DIR"/*.sql.gz 2>/dev/null | tail -5 || echo "No previous backups found"
 else
     echo "❌ Backup failed!"
+    echo "🔍 Checking database status..."
+    docker-compose -f docker-compose.prod.yml exec db pg_isready -U scout_user -h localhost
     exit 1
 fi
