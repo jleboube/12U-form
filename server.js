@@ -16,12 +16,21 @@ const pool = new Pool({
 });
 
 // Middleware
+const isProduction = process.env.NODE_ENV === 'production';
+
 app.use(cors({
-    origin: true,
+    origin: isProduction ? [
+        'https://scouting-report.com',
+        'https://www.scouting-report.com'
+    ] : true,
     credentials: true
 }));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Trust proxy for proper IP forwarding behind Nginx Proxy Manager
+app.set('trust proxy', 1);
 
 // Session configuration
 app.use(session({
@@ -33,8 +42,10 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: { 
-        secure: false, // Set to true in production with HTTPS
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        secure: isProduction, // HTTPS only in production
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        sameSite: isProduction ? 'strict' : 'lax'
     }
 }));
 

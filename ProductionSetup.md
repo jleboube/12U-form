@@ -1,326 +1,182 @@
-# Production Deployment Guide - scouting-report.com
+# Simple Production Setup with Nginx Proxy Manager
 
-## Prerequisites
+## Quick Setup (5 minutes)
 
-### 1. Domain Setup
-- **Register domain**: `scouting-report.com`
-- **DNS Configuration**: Point A records to your VM's IP address:
-  ```
-  A    scouting-report.com        → YOUR_VM_IP
-  A    www.scouting-report.com    → YOUR_VM_IP
-  ```
-
-### 2. VM Requirements
-- **OS**: Ubuntu 20.04+ or similar
-- **RAM**: Minimum 2GB (4GB recommended)
-- **Storage**: Minimum 20GB
-- **Ports**: 22 (SSH), 80 (HTTP), 443 (HTTPS)
-
-### 3. Initial VM Setup
+### 1. Prepare Your Files
 ```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Create application user
-sudo adduser scoutingapp
-sudo usermod -aG sudo scoutingapp
-su - scoutingapp
-
-# Clone your application
-git clone <your-repo-url> baseball-scouting-app
-cd baseball-scouting-app
-```
-
-## Deployment Steps
-
-### Step 1: Environment Configuration
-```bash
-# Copy environment template
+# Copy environment template and update values
 cp .env.production .env
+nano .env  # Change the passwords and domain
 
-# Edit with your secure values
-nano .env
+# Generate secure values if needed:
+openssl rand -base64 32  # For DB_PASSWORD
+openssl rand -base64 48  # For SESSION_SECRET
 ```
 
-**Required values to update in `.env`:**
-- `DB_PASSWORD`: Strong database password (20+ characters)
-- `SESSION_SECRET`: Strong session secret (32+ characters)  
-- `EMAIL`: Your email for SSL certificates
-
-**Generate secure values:**
-```bash
-# Generate strong password
-openssl rand -base64 32
-
-# Generate session secret  
-openssl rand -base64 48
+### 2. Point Your Domain to Server
+Configure your DNS:
+```
+A    scouting-report.com        → YOUR_SERVER_IP
+A    www.scouting-report.com    → YOUR_SERVER_IP
 ```
 
-### Step 2: Deploy Application
+### 3. Start the Application
 ```bash
-# Make deployment script executable
-chmod +x deploy.sh
+# Start all services
+docker-compose -f docker-compose.prod.yml up -d
 
-# Edit deploy.sh to update your email
-nano deploy.sh  # Change EMAIL="your-email@example.com"
-
-# Run deployment
-./deploy.sh
+# Check everything is running
+docker-compose -f docker-compose.prod.yml ps
 ```
 
-### Step 3: DNS Verification
+### 4. Configure Nginx Proxy Manager (Web UI)
+
+#### Access the Admin Panel
+- Open: `http://YOUR_SERVER_IP:81`
+- **Default Login:**
+  - Email: `admin@example.com`
+  - Password: `changeme`
+- **Change these credentials immediately!**
+
+#### Add Your Domain
+1. **Go to "Proxy Hosts"** → Click **"Add Proxy Host"**
+
+2. **Details Tab:**
+   - **Domain Names:** `scouting-report.com`, `www.scouting-report.com`
+   - **Scheme:** `http`
+   - **Forward Hostname/IP:** `app` (the Docker service name)
+   - **Forward Port:** `3000`
+   - ✅ **Cache Assets**
+   - ✅ **Block Common Exploits**
+   - ✅ **Websockets Support**
+
+3. **SSL Tab:**
+   - ✅ **SSL Certificate:** Request a new SSL Certificate
+   - ✅ **Force SSL**
+   - ✅ **HTTP/2 Support**
+   - **Email:** Your email for Let's Encrypt
+   - ✅ **I Agree to the Let's Encrypt Terms of Service**
+
+4. **Click "Save"**
+
+### 5. Test Your Site
+- Visit: `https://scouting-report.com`
+- Should redirect to HTTPS and show login page
+- Login with: `admin@demo.com` / `admin123`
+
+## That's It! 🎉
+
+Your site is now running with:
+- ✅ SSL Certificate (auto-renewed)
+- ✅ HTTPS redirect
+- ✅ Reverse proxy
+- ✅ Security headers
+- ✅ Professional setup
+
+## Management Commands
+
+### View Application Status
 ```bash
-# Check if DNS has propagated
-nslookup scouting-report.com
-nslookup www.scouting-report.com
-
-# Test HTTP redirect (should redirect to HTTPS)
-curl -I http://scouting-report.com
-
-# Test HTTPS (should return 200 OK)
-curl -I https://scouting-report.com
-```
-
-## Security Configuration
-
-### Firewall Status
-```bash
-# Check firewall status
-sudo ufw status
-
-# Should show:
-# Status: active
-# To                         Action      From
-# --                         ------      ----
-# 22/tcp                     ALLOW       Anywhere
-# 80/tcp                     ALLOW       Anywhere  
-# 443/tcp                    ALLOW       Anywhere
-```
-
-### SSL Certificate
-```bash
-# Check certificate expiration
-sudo docker-compose -f docker-compose.prod.yml exec certbot certbot certificates
-
-# Manual renewal (automatic renewal is configured)
-sudo docker-compose -f docker-compose.prod.yml exec certbot certbot renew
-```
-
-### Fail2ban Protection
-```bash
-# Check fail2ban status
-sudo fail2ban-client status
-
-# Check specific jail
-sudo fail2ban-client status sshd
-sudo fail2ban-client status nginx-http-auth
-```
-
-## Application Management
-
-### Service Management
-```bash
-# View running containers
+# Check all services
 docker-compose -f docker-compose.prod.yml ps
 
-# View logs
-docker-compose -f docker-compose.prod.yml logs
+# View application logs
 docker-compose -f docker-compose.prod.yml logs app
-docker-compose -f docker-compose.prod.yml logs nginx
 
-# Restart services
-docker-compose -f docker-compose.prod.yml restart
-docker-compose -f docker-compose.prod.yml restart app
+# View database logs
+docker-compose -f docker-compose.prod.yml logs db
+```
 
-# Update application
+### Backup Database
+```bash
+# Create backup
+docker-compose -f docker-compose.prod.yml exec db pg_dump -U scout_user baseball_scouting > backup_$(date +%Y%m%d).sql
+
+# Restore backup
+cat backup_20241220.sql | docker-compose -f docker-compose.prod.yml exec -T db psql -U scout_user -d baseball_scouting
+```
+
+### Update Application
+```bash
+# Pull latest changes
 git pull
+
+# Rebuild and restart
 docker-compose -f docker-compose.prod.yml up --build -d
 ```
 
-### Database Management
+### Restart Services
 ```bash
-# Create backup
-./backup_database.sh
+# Restart everything
+docker-compose -f docker-compose.prod.yml restart
 
-# View backups
-ls -la ~/baseball-scouting-backups/
-
-# Restore from backup
-./restore_database.sh ~/baseball-scouting-backups/backup_file.sql.gz
-
-# Connect to database
-docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -d baseball_scouting
+# Restart just the app
+docker-compose -f docker-compose.prod.yml restart app
 ```
+
+## Nginx Proxy Manager Features
+
+### Access Control (Optional)
+- Add **Access Lists** to restrict access by IP
+- Set up **basic authentication** for extra security
+
+### SSL Certificate Management
+- Certificates auto-renew every 60 days
+- View expiration dates in **SSL Certificates** tab
+- Force renewal if needed
 
 ### Monitoring
-```bash
-# Check system resources
-htop
-df -h
-free -h
-
-# Check docker resources
-docker stats
-
-# Check nginx access logs
-docker-compose -f docker-compose.prod.yml logs nginx | tail -100
-
-# Check application logs
-docker-compose -f docker-compose.prod.yml logs app | tail -100
-```
-
-## First-Time Setup After Deployment
-
-### 1. Access the Application
-- Navigate to: `https://scouting-report.com`
-- You should see the login page
-
-### 2. Login with Demo Account
-- **Email**: `admin@demo.com`
-- **Password**: `admin123`
-
-### 3. Immediate Security Tasks
-1. **Change admin password** (create user management feature)
-2. **Create your team accounts**
-3. **Test scouting report creation**
-4. **Test backup/restore process**
-
-## Maintenance Tasks
-
-### Daily
-- Check application accessibility
-- Monitor disk space: `df -h`
-
-### Weekly
-- Review logs for errors
-- Check backup integrity
-- Update system packages: `sudo apt update && sudo apt upgrade`
-
-### Monthly
-- Review SSL certificate status
-- Test backup restore process
-- Review fail2ban logs
-- Update Docker images
+- **View logs** in the web interface
+- **Check certificate status**
+- **Monitor proxy host health**
 
 ## Troubleshooting
 
-### SSL Issues
-```bash
-# Check certificate files
-sudo ls -la /etc/letsencrypt/live/scouting-report.com/
+### Site Not Loading
+1. Check DNS propagation: `nslookup scouting-report.com`
+2. Verify containers: `docker-compose -f docker-compose.prod.yml ps`
+3. Check app logs: `docker-compose -f docker-compose.prod.yml logs app`
 
-# Regenerate certificate
-docker-compose -f docker-compose.prod.yml stop nginx
-docker run --rm -v $(pwd)/certbot/conf:/etc/letsencrypt -v $(pwd)/certbot/www:/var/www/certbot certbot/certbot renew --force-renewal
-docker-compose -f docker-compose.prod.yml start nginx
-```
+### SSL Issues
+1. Check domain DNS points to your server
+2. Verify port 80 and 443 are open
+3. Try regenerating certificate in Nginx Proxy Manager
 
 ### Database Connection Issues
+1. Check database logs: `docker-compose -f docker-compose.prod.yml logs db`
+2. Verify environment variables in `.env`
+3. Restart database: `docker-compose -f docker-compose.prod.yml restart db`
+
+### Can't Access Admin Panel (Port 81)
 ```bash
-# Check database status
-docker-compose -f docker-compose.prod.yml logs db
+# Check if port 81 is open on your server
+sudo ufw allow 81
 
-# Reset database password
-docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -c "ALTER USER scout_user PASSWORD 'new_password';"
+# Or use SSH tunnel if port is blocked
+ssh -L 8081:localhost:81 user@your-server
+# Then access http://localhost:8081
 ```
 
-### Application Issues
-```bash
-# Check application logs
-docker-compose -f docker-compose.prod.yml logs app
+## Security Notes
 
-# Restart application only
-docker-compose -f docker-compose.prod.yml restart app
+1. **Change default admin credentials** in Nginx Proxy Manager immediately
+2. **Use strong passwords** in your `.env` file
+3. **Keep Docker images updated** regularly
+4. **Monitor access logs** in Nginx Proxy Manager
+5. **Consider adding access control** for admin areas
 
-# Rebuild application
-docker-compose -f docker-compose.prod.yml up --build -d app
+## File Structure
+```
+baseball-scouting-app/
+├── docker-compose.prod.yml    # Main Docker setup
+├── .env                       # Your environment variables
+├── init.sql                   # Database schema
+├── server.js                  # Application server
+├── public/                    # Web files
+│   ├── index.html
+│   ├── app.js
+│   └── styles.css
+└── backups/                   # Database backups (created automatically)
 ```
 
-### Performance Issues
-```bash
-# Check resource usage
-docker stats
-
-# Check system load
-uptime
-iostat
-
-# Optimize database
-docker-compose -f docker-compose.prod.yml exec db psql -U scout_user -d baseball_scouting -c "VACUUM ANALYZE;"
-```
-
-## Backup Strategy
-
-### Automated Backups
-- **Daily SQL dumps**: 2 AM via cron
-- **Location**: `~/baseball-scouting-backups/`
-- **Retention**: 30 days
-
-### Manual Backup
-```bash
-# Create immediate backup
-./backup_database.sh
-
-# Backup to external location
-rsync -av ~/baseball-scouting-backups/ /mnt/external-backup/
-```
-
-### Disaster Recovery
-1. **New VM Setup**: Deploy on fresh VM
-2. **Restore Database**: Use latest backup
-3. **Update DNS**: Point domain to new IP
-4. **SSL**: Certificates restore automatically
-
-## Performance Optimization
-
-### For High Traffic
-```yaml
-# In docker-compose.prod.yml, add:
-services:
-  app:
-    deploy:
-      replicas: 2
-    
-  nginx:
-    # Add load balancing
-```
-
-### Database Optimization
-```sql
--- Connect to database and run:
-CREATE INDEX IF NOT EXISTS idx_reports_date ON scouting_reports(scout_date);
-CREATE INDEX IF NOT EXISTS idx_reports_team ON scouting_reports(team);
-VACUUM ANALYZE;
-```
-
-## Support Contacts
-- **System Admin**: [Your contact]
-- **Database Backup**: `~/baseball-scouting-backups/`
-- **SSL Certificate**: Auto-renewed
-- **Domain**: scouting-report.com
-- **Server IP**: [Your VM IP]
-
----
-
-## Quick Reference Commands
-
-```bash
-# Application status
-docker-compose -f docker-compose.prod.yml ps
-
-# View logs
-docker-compose -f docker-compose.prod.yml logs -f
-
-# Backup database
-./backup_database.sh
-
-# Update application
-git pull && docker-compose -f docker-compose.prod.yml up --build -d
-
-# Check SSL certificate
-curl -I https://scouting-report.com
-
-# System monitoring
-htop
-df -h
-```
+This setup is much simpler than traditional nginx configurations and provides all the same benefits through an easy web interface!
